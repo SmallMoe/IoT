@@ -2,50 +2,89 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Global ESP32 Control</title>
+  <title>ESP32-C5 Control Center</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
   <style>
-    body { 
-      font-family: Arial, sans-serif; 
-      text-align: center; 
-      margin-top: 50px; 
-      background-color: #1a1a1a; 
-      color: #fff; 
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      background-color: #121212;
+      color: #ffffff;
     }
-    .btn { 
-      padding: 15px 30px; 
-      font-size: 20px; 
-      color: white; 
-      border: none; 
-      border-radius: 8px; 
-      margin: 10px; 
-      cursor: pointer; 
-      width: 160px; 
+    .card {
+      background: #1e1e1e;
+      max-width: 400px;
+      margin: 20px auto;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
-    .btn-on { background-color: #2ecc71; }
+    .control-group {
+      margin: 20px 0;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    input[type="color"] {
+      border: none;
+      width: 100%;
+      height: 50px;
+      border-radius: 8px;
+      cursor: pointer;
+      background: none;
+    }
+    input[type="range"] {
+      width: 100%;
+      margin: 10px 0;
+    }
+    .btn {
+      padding: 12px 24px;
+      font-size: 16px;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      margin: 5px;
+      cursor: pointer;
+    }
     .btn-off { background-color: #e74c3c; }
-    #status { 
-      margin-top: 25px; 
-      font-weight: bold; 
-      font-size: 14px; 
-      color: #888; 
+    #status {
+      margin-top: 15px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #888;
     }
   </style>
 </head>
 <body>
-  <h1>ESP32 Global Controller</h1>
-  <p>Control your LED from anywhere on Earth</p>
-  
-  <button class="btn btn-on" onclick="sendCmd('ON')">TURN ON</button>
-  <button class="btn btn-off" onclick="sendCmd('OFF')">TURN OFF</button>
-  
-  <div id="status">Connecting to MQTT Broker...</div>
+
+  <h1>ESP32-C5 Controller</h1>
+
+  <div class="card">
+    <div class="control-group">
+      <label for="colorPicker">RGB LED Color</label>
+      <input type="color" id="colorPicker" value="#00ff00" onchange="sendColor()">
+      <button class="btn btn-off" onclick="turnOffLED()">Turn Off LED</button>
+    </div>
+
+    <hr style="border: 1px solid #333; margin: 25px 0;">
+
+    <div class="control-group">
+      <label for="servoSlider">Servo Position: <span id="servoVal">90</span>°</label>
+      <input type="range" id="servoSlider" min="0" max="180" value="90" oninput="updateServoVal(this.value)" onchange="sendServo()">
+    </div>
+
+    <div id="status">Connecting to MQTT Broker...</div>
+  </div>
 
   <script>
-    // ⚠️ MUST MATCH THE EXACT TOPIC NAME IN YOUR ESP32 CODE
+    // ⚠️ MUST MATCH YOUR ESP32 TOPIC EXACTLY
     const topic = "myhome/esp32/led_control_98765";
 
-    // Connected via Port 8884 for HTTPS/SSL WebSockets
     const client = new Paho.MQTT.Client("broker.hivemq.com", 8884, "web_" + Math.random().toString(16).substr(2, 8));
 
     client.onConnectionLost = function (responseObject) {
@@ -54,25 +93,46 @@
     };
 
     client.connect({
-      useSSL: true, // Enabled for HTTPS compatibility on GitHub Pages
+      useSSL: true,
       onSuccess: function () {
         document.getElementById("status").innerText = "Status: Connected to Cloud Broker";
         document.getElementById("status").style.color = "#2ecc71";
       },
       onFailure: function (err) {
-        document.getElementById("status").innerText = "Status: Connection Failed (" + err.errorMessage + ")";
+        document.getElementById("status").innerText = "Status: Connection Failed";
         document.getElementById("status").style.color = "#e74c3c";
       }
     });
 
-    function sendCmd(command) {
+    function sendPayload(data) {
       if (client.isConnected()) {
-        const message = new Paho.MQTT.Message(command);
+        const message = new Paho.MQTT.Message(JSON.stringify(data));
         message.destinationName = topic;
         client.send(message);
-      } else {
-        alert("Not connected to MQTT broker!");
       }
+    }
+
+    function sendColor() {
+      const hex = document.getElementById("colorPicker").value;
+      // Convert HEX to RGB
+      const r = parseInt(hex.substr(1,2), 16);
+      const g = parseInt(hex.substr(3,2), 16);
+      const b = parseInt(hex.substr(5,2), 16);
+
+      sendPayload({ type: "led", r: r, g: g, b: b });
+    }
+
+    function turnOffLED() {
+      sendPayload({ type: "led", r: 0, g: 0, b: 0 });
+    }
+
+    function updateServoVal(val) {
+      document.getElementById("servoVal").innerText = val;
+    }
+
+    function sendServo() {
+      const angle = parseInt(document.getElementById("servoSlider").value);
+      sendPayload({ type: "servo", angle: angle });
     }
   </script>
 </body>
