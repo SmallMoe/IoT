@@ -5,11 +5,31 @@
   <title>Global ESP32 Control</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #1a1a1a; color: #fff; }
-    .btn { padding: 15px 30px; font-size: 20px; color: white; border: none; border-radius: 8px; margin: 10px; cursor: pointer; width: 160px; }
+    body { 
+      font-family: Arial, sans-serif; 
+      text-align: center; 
+      margin-top: 50px; 
+      background-color: #1a1a1a; 
+      color: #fff; 
+    }
+    .btn { 
+      padding: 15px 30px; 
+      font-size: 20px; 
+      color: white; 
+      border: none; 
+      border-radius: 8px; 
+      margin: 10px; 
+      cursor: pointer; 
+      width: 160px; 
+    }
     .btn-on { background-color: #2ecc71; }
     .btn-off { background-color: #e74c3c; }
-    #status { margin-top: 25px; font-weight: bold; font-size: 14px; color: #888; }
+    #status { 
+      margin-top: 25px; 
+      font-weight: bold; 
+      font-size: 14px; 
+      color: #888; 
+    }
   </style>
 </head>
 <body>
@@ -22,11 +42,11 @@
   <div id="status">Connecting to MQTT Broker...</div>
 
   <script>
-    // ⚠️ UNIQUE TOPIC NAME: Change this to something unique so others don't interfere
+    // ⚠️ MUST MATCH THE EXACT TOPIC NAME IN YOUR ESP32 CODE
     const topic = "myhome/esp32/led_control_98765";
 
-    // Connect to HiveMQ public WebSockets broker on port 8000
-    const client = new Paho.MQTT.Client("broker.hivemq.com", 8000, "web_" + Math.random().toString(16).substr(2, 8));
+    // Connected via Port 8884 for HTTPS/SSL WebSockets
+    const client = new Paho.MQTT.Client("broker.hivemq.com", 8884, "web_" + Math.random().toString(16).substr(2, 8));
 
     client.onConnectionLost = function (responseObject) {
       document.getElementById("status").innerText = "Status: Disconnected";
@@ -34,6 +54,7 @@
     };
 
     client.connect({
+      useSSL: true, // Enabled for HTTPS compatibility on GitHub Pages
       onSuccess: function () {
         document.getElementById("status").innerText = "Status: Connected to Cloud Broker";
         document.getElementById("status").style.color = "#2ecc71";
