@@ -1,12 +1,324 @@
-/*
+<!DOCTYPE html>
+<html lang="en" class="h-full dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSC-32 ESP32 Wi-Fi Servo Studio Suite</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        dark: {
+                            950: '#090d16',
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            600: '#475569'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .mirror { transform: scaleX(-1); }
+    </style>
+</head>
+<body class="bg-dark-950 text-slate-100 min-h-full flex flex-col antialiased selection:bg-blue-500 selection:text-white">
+
+    <!-- Top Header Navigation -->
+    <header class="bg-dark-900 border-b border-dark-800 sticky top-0 z-50 px-4 py-3 sm:px-6 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white leading-none flex items-center gap-2">
+                        SSC-32 ESP32 Wi-Fi Studio <span class="text-[10px] bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full font-medium">6-Servo Hotspot v4.0</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 mt-1">ESP32 Wi-Fi AP + UART RX/TX Bridge, 6-Servo Control, MediaPipe Tracking & Sequences</p>
+                </div>
+            </div>
+
+            <!-- ESP32 Wi-Fi Connection Bar & Code Guide Button -->
+            <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-end">
+                <div class="flex items-center space-x-2 bg-dark-950 px-3 py-1.5 rounded-xl border border-dark-800 text-xs">
+                    <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                    <span id="statusText" class="text-slate-300 font-medium">Disconnected</span>
+                </div>
+
+                <div class="flex items-center space-x-1.5 bg-dark-950 px-3 py-1.5 rounded-xl border border-dark-800 text-xs">
+                    <label for="esp32IpInput" class="text-slate-400 font-medium">ESP32 IP:</label>
+                    <input type="text" id="esp32IpInput" value="192.168.4.1" class="bg-transparent text-blue-400 font-mono w-28 focus:outline-none">
+                </div>
+
+                <button id="connectBtn" onclick="toggleEsp32Connection()" class="px-4 py-1.5 rounded-xl font-medium text-xs bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition-all cursor-pointer">
+                    <span id="connectBtnText">Connect Wi-Fi</span>
+                </button>
+
+                <button onclick="openModal()" class="px-3 py-1.5 rounded-xl font-medium text-xs bg-dark-800 hover:bg-dark-700 text-slate-200 border border-dark-700 transition-all cursor-pointer flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                    ESP32 Code Guide
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Grid -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Video Preview, HUD & Sequence Player (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col space-y-4">
+            
+            <!-- Mode Switcher Tabs -->
+            <div class="bg-dark-900 border border-dark-800 rounded-2xl p-1.5 flex shadow-lg">
+                <button id="tabVisionBtn" onclick="switchMode('vision')" class="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    Vision Tracking (Face / Hand)
+                </button>
+                <button id="tabSequenceBtn" onclick="switchMode('sequence')" class="flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                    Sequence & Keyframes (6 Servos)
+                </button>
+            </div>
+
+            <!-- Vision Tracking View -->
+            <div id="visionSection" class="relative bg-dark-900 border border-dark-800 rounded-2xl overflow-hidden shadow-2xl aspect-video flex items-center justify-center">
+                <video id="webcamVideo" class="hidden" playsinline></video>
+                <canvas id="outputCanvas" class="w-full h-full mirror object-cover"></canvas>
+
+                <!-- Overlay HUD -->
+                <div class="absolute top-3 left-3 bg-dark-950/80 backdrop-blur-md border border-dark-800 rounded-xl px-3 py-2 text-xs space-y-1 z-10 font-mono">
+                    <div class="flex justify-between items-center gap-4 text-slate-400">
+                        <span>Mode:</span>
+                        <span id="visionModeHud" class="text-blue-400 font-semibold">Face Tracking</span>
+                    </div>
+                    <div class="flex justify-between items-center gap-4 text-slate-400">
+                        <span>Status:</span>
+                        <span id="trackingStatus" class="text-rose-400 font-semibold">No Target Detected</span>
+                    </div>
+                    <div class="flex justify-between items-center gap-4 text-slate-400">
+                        <span>Coordinates:</span>
+                        <span id="facePosHud" class="text-emerald-300 font-medium">0.50, 0.50</span>
+                    </div>
+                </div>
+
+                <!-- Video Controls Floating Toolbar -->
+                <div class="absolute bottom-3 right-3 flex items-center gap-2 z-10">
+                    <button id="camToggleBtn" onclick="toggleWebcam()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-lg shadow-blue-600/40 transition-all cursor-pointer flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        <span id="camToggleText">Start Camera</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sequence Recorder View (Hidden by default) -->
+            <div id="sequenceSection" class="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-2xl hidden flex-col space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        6-Servo Position Sequence & Keyframe Timeline
+                    </h2>
+                    <span id="stepCountBadge" class="text-xs bg-dark-800 text-slate-300 px-2.5 py-0.5 rounded-full font-medium">0 Steps</span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="captureStep()" class="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path></svg>
+                        Capture 6-Servo Pose
+                    </button>
+                    <button onclick="playSequence()" id="playSeqBtn" class="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Play Sequence
+                    </button>
+                    <button onclick="stopSequence()" class="py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10h6v6H9z"></path></svg>
+                        Stop
+                    </button>
+                </div>
+
+                <div id="sequenceStepsList" class="bg-dark-950 border border-dark-800 rounded-xl p-3 h-48 overflow-y-auto space-y-2">
+                    <div class="text-center text-slate-500 text-xs py-12 flex flex-col items-center justify-center gap-2">
+                        <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        <span>No sequence steps recorded yet.<br>Adjust the 6 servo sliders and click "Capture 6-Servo Pose".</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-2 pt-2 border-t border-dark-800">
+                    <button onclick="exportSequence()" class="flex-1 bg-dark-800 hover:bg-dark-700 text-slate-300 text-xs py-2 rounded-xl transition cursor-pointer">Export JSON</button>
+                    <label class="flex-1 bg-dark-800 hover:bg-dark-700 text-slate-300 text-xs py-2 rounded-xl transition cursor-pointer text-center">
+                        Import JSON
+                        <input type="file" accept=".json" onchange="importSequence(event)" class="hidden">
+                    </label>
+                    <button onclick="clearSequence()" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs py-2 px-3 rounded-xl transition cursor-pointer">Clear</button>
+                </div>
+            </div>
+
+            <!-- Command Transmission Console -->
+            <div class="bg-dark-900 border border-dark-800 rounded-2xl p-4 shadow-xl flex flex-col h-44">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                        ESP32 Wi-Fi Command Console (`\r` Carriage Return Included)
+                    </h3>
+                    <button onclick="clearLog()" class="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-700 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer">Clear</button>
+                </div>
+                <div id="consoleLog" class="flex-1 bg-dark-950 border border-dark-800/80 rounded-xl p-2.5 font-mono text-[11px] text-slate-300 overflow-y-auto space-y-1">
+                    <div class="text-slate-500">[System] Connect to ESP32 Wi-Fi Hotspot (default IP: 192.168.4.1) to transmit commands.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Safety, Speed Governor & 6 Servo Channels (5 Cols) -->
+        <div class="lg:col-span-5 space-y-5">
+
+            <!-- Anti-Face-Strike & Speed Governor Panel -->
+            <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <h2 class="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    Safety & Speed Governor (Anti-Face-Strike)
+                </h2>
+
+                <div class="space-y-3">
+                    <div class="bg-dark-950/60 p-3 rounded-xl border border-dark-800">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-medium text-slate-300">Movement Speed Multiplier</span>
+                            <span id="speedValText" class="text-xs font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">1.0x (Normal)</span>
+                        </div>
+                        <input type="range" id="globalSpeedRange" min="0.1" max="2.5" step="0.1" value="1.0" oninput="updateGlobalSpeed(this.value)" class="w-full accent-blue-500 bg-dark-800 rounded-lg h-2 cursor-pointer">
+                    </div>
+
+                    <div class="bg-dark-950/60 p-3 rounded-xl border border-dark-800">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-xs font-medium text-slate-300">Min Transition Time (Dampening)</span>
+                            <span id="minTimeValText" class="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">500 ms</span>
+                        </div>
+                        <input type="range" id="minTimeRange" min="100" max="2000" step="50" value="500" oninput="updateMinTime(this.value)" class="w-full accent-emerald-500 bg-dark-800 rounded-lg h-2 cursor-pointer">
+                    </div>
+
+                    <div class="flex items-center justify-between bg-dark-950/60 p-3 rounded-xl border border-dark-800">
+                        <div>
+                            <span class="text-xs font-medium text-slate-200 block">Anti-Face-Strike Limit</span>
+                            <span class="text-[10px] text-slate-400">Caps servo travel between 800µs and 2200µs</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="faceSafetyToggle" checked class="sr-only peer" onchange="toggleFaceSafety(this.checked)">
+                            <div class="w-11 h-6 bg-dark-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vision Tracking Options (6 Servos mapping) -->
+            <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <h2 class="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    Tracking Engine & 6-Servo Mapping
+                </h2>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-400 font-medium">Tracking Engine:</label>
+                        <select id="trackingEngine" onchange="changeTrackingEngine(this.value)" class="w-full bg-dark-950 border border-dark-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                            <option value="face">Face Mesh (Nose Tip)</option>
+                            <option value="hand">Hand Tracking (Index Tip)</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-400 font-medium">X-Axis Servo Channel:</label>
+                        <select id="panPin" class="w-full bg-dark-950 border border-dark-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                            <script>
+                                for(let i=0; i<6; i++) {
+                                    document.write(`<option value="${i}" ${i===0?'selected':''}>Channel #${i}</option>`);
+                                }
+                            </script>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label class="text-xs text-slate-400 font-medium">Y-Axis Servo Channel:</label>
+                        <select id="tiltPin" class="w-full bg-dark-950 border border-dark-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500">
+                            <script>
+                                for(let i=0; i<6; i++) {
+                                    document.write(`<option value="${i}" ${i===1?'selected':''}>Channel #${i}</option>`);
+                                }
+                            </script>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="sendCentreAll()" class="w-full py-2.5 px-3 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-200 font-medium text-xs transition cursor-pointer">
+                            Centre All (1500µs)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manual Servo Sliders (Channels 0 to 5) -->
+            <div class="bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <h2 class="text-sm font-bold text-white tracking-tight flex items-center justify-between">
+                    <span>Manual Servo Sliders (Channels 0 - 5)</span>
+                    <button onclick="sendAllManualServos()" class="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded-lg transition font-medium">Send All 6</button>
+                </h2>
+
+                <div class="space-y-2.5 max-h-72 overflow-y-auto pr-1" id="servoSlidersContainer">
+                    <!-- Inserted via script for 6 servos -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ESP32 Arduino Code Guide Modal -->
+    <div id="codeModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-dark-900 border border-dark-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-center pb-3 border-b border-dark-800 mb-4">
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                    Companion Arduino Code for ESP32 (Wi-Fi Hotspot & UART Bridge)
+                </h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-200 text-xs font-bold p-1 cursor-pointer">✕ Close</button>
+            </div>
+            
+            <p class="text-xs text-slate-300 mb-3">
+                Flash this code onto your ESP32. It creates a Wi-Fi Hotspot named <code class="text-blue-400 bg-dark-950 px-1.5 py-0.5 rounded">SSC32_Robot_Hotspot</code> (Password: <code class="text-emerald-400 bg-dark-950 px-1.5 py-0.5 rounded">12345678</code>). Connect your phone to this hotspot, open this web page, and enter IP <code class="text-blue-400 bg-dark-950 px-1.5 py-0.5 rounded">192.168.4.1</code>. The ESP32 receives HTTP requests and forwards commands via UART (<code class="text-emerald-400">Serial2</code>) to the SSC-32 board.
+            </p>
+
+            <div class="relative flex-1 bg-dark-950 border border-dark-800 rounded-xl p-3 font-mono text-[11px] text-slate-300 overflow-y-auto">
+                <button onclick="copyCode()" class="absolute top-3 right-3 bg-dark-800 hover:bg-dark-700 text-slate-200 px-2.5 py-1 rounded-lg text-[10px] transition cursor-pointer">Copy Code</button>
+                <pre id="arduinoCodeText"><code class="language-cpp">/*
   ESP32 Wi-Fi Hotspot to SSC-32 Servo Controller Bridge (6 Servos)
   Hardware Connections:
     ESP32 TX2 (GPIO 17) -> SSC-32 RX (through logic level shifter if needed)
     ESP32 GND -> SSC-32 GND
 */
 
-#include <WiFi.h>
-#include <WebServer.h>
+#include &lt;WiFi.h&gt;
+#include &lt;WebServer.h&gt;
 
 const char* ssid = "SSC32_Robot_Hotspot";
 const char* password = "12345678";
@@ -54,3 +366,617 @@ void setup() {
 void loop() {
   server.handleClient();
 }
+</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- Application Script -->
+    <script>
+        // --- State Variables ---
+        let esp32Ip = "192.168.4.1";
+        let isConnected = false;
+
+        let faceMeshTracker = null;
+        let handsTracker = null;
+        let cameraStream = null;
+        let isCameraRunning = false;
+        let activeEngine = 'face'; // 'face' or 'hand'
+
+        let globalSpeedFactor = 1.0;
+        let minTransitionTime = 500; // ms
+        let faceSafetyEnabled = true;
+
+        let lastSendTime = 0;
+        const THROTTLE_MS = 60;
+
+        let sequenceSteps = [];
+        let isPlayingSequence = false;
+        let playInterval = null;
+
+        // 6 Servo motors default positions (Channels 0 to 5)
+        let servoPositions = [1500, 1500, 1500, 1500, 1500, 1500];
+
+        // --- Initialization ---
+        window.addEventListener('DOMContentLoaded', () => {
+            renderServoSliders();
+            logConsole("[System] Ready. Enter ESP32 IP address and click 'Connect Wi-Fi'.");
+        });
+
+        function renderServoSliders() {
+            const container = document.getElementById('servoSlidersContainer');
+            container.innerHTML = '';
+            for(let i=0; i<6; i++) {
+                const div = document.createElement('div');
+                div.className = "bg-dark-950/60 p-2.5 rounded-xl border border-dark-800 space-y-1.5";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-semibold text-slate-200">Servo Channel #${i}</span>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="servo_num_${i}" value="${servoPositions[i]}" min="500" max="2500" 
+                                class="w-16 bg-dark-900 text-blue-400 font-mono text-center py-0.5 rounded border border-dark-700 focus:outline-none"
+                                onchange="onManualNumberChange(${i}, this.value)">
+                            <span class="text-slate-400 text-[10px]">µs</span>
+                        </div>
+                    </div>
+                    <input type="range" id="servo_slider_${i}" min="500" max="2500" step="10" value="${servoPositions[i]}"
+                        oninput="onManualSliderInput(${i}, this.value)"
+                        class="w-full accent-blue-500 bg-dark-800 rounded-lg h-1.5 cursor-pointer">
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        function onManualSliderInput(index, val) {
+            val = parseInt(val);
+            if (faceSafetyEnabled) {
+                val = Math.max(800, Math.min(2200, val));
+            }
+            servoPositions[index] = val;
+            document.getElementById(`servo_num_${index}`).value = val;
+            document.getElementById(`servo_slider_${index}`).value = val;
+            sendSingleServoCommand(index, val);
+        }
+
+        function onManualNumberChange(index, val) {
+            val = parseInt(val) || 1500;
+            if (faceSafetyEnabled) {
+                val = Math.max(800, Math.min(2200, val));
+            }
+            servoPositions[index] = val;
+            renderServoSliders();
+            sendSingleServoCommand(index, val);
+        }
+
+        // --- ESP32 Wi-Fi HTTP Connection Manager ---
+        async function toggleEsp32Connection() {
+            if (isConnected) {
+                disconnectEsp32();
+            } else {
+                await connectEsp32();
+            }
+        }
+
+        async function connectEsp32() {
+            esp32Ip = document.getElementById('esp32IpInput').value.trim();
+            if (!esp32Ip) {
+                showToast("Please enter a valid ESP32 IP address.", "error");
+                return;
+            }
+
+            logConsole(`Connecting to ESP32 hotspot at http://${esp32Ip}...`, 'system');
+
+            try {
+                const response = await fetch(`http://${esp32Ip}/status`, { signal: AbortSignal.timeout(3500) });
+                if (response.ok) {
+                    setConnectedState(true);
+                } else {
+                    throw new Error("Invalid response from ESP32");
+                }
+            } catch (error) {
+                // Try fallback with no-cors mode in case CORS headers are blocked before fully handshaking
+                try {
+                    await fetch(`http://${esp32Ip}/`, { mode: 'no-cors', signal: AbortSignal.timeout(3500) });
+                    setConnectedState(true);
+                } catch (err2) {
+                    console.error("ESP32 connection failed:", err2);
+                    logConsole(`Connection Failed: Ensure phone is connected to ESP32 Wi-Fi hotspot.`, 'error');
+                    showToast("Failed to reach ESP32. Check Wi-Fi hotspot.", "error");
+                }
+            }
+        }
+
+        function setConnectedState(status) {
+            isConnected = status;
+            if (status) {
+                document.getElementById('connectBtnText').textContent = "Disconnect Wi-Fi";
+                document.getElementById('connectBtn').classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                document.getElementById('connectBtn').classList.add('bg-rose-600', 'hover:bg-rose-500');
+
+                document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+                document.getElementById('statusText').textContent = `Connected (${esp32Ip})`;
+
+                logConsole(`Successfully connected to ESP32 bridge at ${esp32Ip}`, 'success');
+                showToast("Connected to ESP32 Wi-Fi bridge!", "success");
+            } else {
+                document.getElementById('connectBtnText').textContent = "Connect Wi-Fi";
+                document.getElementById('connectBtn').classList.remove('bg-rose-600', 'hover:bg-rose-500');
+                document.getElementById('connectBtn').classList.add('bg-blue-600', 'hover:bg-blue-500');
+
+                document.getElementById('statusDot').className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                document.getElementById('statusText').textContent = "Disconnected";
+
+                logConsole("Disconnected from ESP32.", "system");
+                showToast("Disconnected.", "info");
+            }
+        }
+
+        function disconnectEsp32() {
+            setConnectedState(false);
+        }
+
+        // Send command via HTTP GET to ESP32 with explicit \r Carriage Return terminator
+        async function sendSerialCommand(cmdText, isTrackingCommand = false) {
+            const fullCommand = cmdText.trim() + "\r";
+            
+            if (!isTrackingCommand) {
+                logConsole(`> ${cmdText.trim()}`, 'sent');
+            }
+
+            if (!isConnected) {
+                if (!isTrackingCommand) showToast("Not connected to ESP32 Wi-Fi!", "error");
+                return;
+            }
+
+            try {
+                const url = `http://${esp32Ip}/command?text=${encodeURIComponent(fullCommand)}`;
+                await fetch(url, { mode: 'no-cors' });
+                if (!isTrackingCommand) {
+                    logConsole(`< Sent via Wi-Fi to ESP32 UART`, 'received');
+                }
+            } catch (error) {
+                console.error("HTTP send failed:", error);
+                logConsole(`HTTP Send Error: ${error.message}`, 'error');
+            }
+        }
+
+        function sendSingleServoCommand(id, pos) {
+            const time = Math.round(minTransitionTime / globalSpeedFactor);
+            sendSerialCommand(`#${id}P${pos}T${time}`);
+        }
+
+        function sendAllManualServos() {
+            let cmd = "";
+            const time = Math.round(minTransitionTime / globalSpeedFactor);
+            for(let i=0; i<6; i++) {
+                cmd += `#${i}P${servoPositions[i]} `;
+            }
+            cmd += `T${time}`;
+            sendSerialCommand(cmd);
+            showToast("Sent all 6 manual servos!", "success");
+        }
+
+        // --- MediaPipe Trackers Setup ---
+        function initTrackers() {
+            faceMeshTracker = new FaceMesh({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+            });
+            faceMeshTracker.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            faceMeshTracker.onResults(onFaceResults);
+
+            handsTracker = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            handsTracker.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            handsTracker.onResults(onHandResults);
+        }
+
+        function changeTrackingEngine(engine) {
+            activeEngine = engine;
+            document.getElementById('visionModeHud').textContent = (engine === 'face') ? "Face Tracking" : "Hand Tracking";
+            logConsole(`Switched tracking engine to: ${engine}`, 'system');
+        }
+
+        async function toggleWebcam() {
+            if (isCameraRunning) {
+                stopWebcam();
+            } else {
+                await startWebcam();
+            }
+        }
+
+        async function startWebcam() {
+            if (!faceMeshTracker || !handsTracker) initTrackers();
+
+            const videoElement = document.getElementById('webcamVideo');
+            
+            try {
+                cameraStream = new Camera(videoElement, {
+                    onFrame: async () => {
+                        if (activeEngine === 'face') {
+                            await faceMeshTracker.send({ image: videoElement });
+                        } else {
+                            await handsTracker.send({ image: videoElement });
+                        }
+                    },
+                    width: 640,
+                    height: 480
+                });
+
+                await cameraStream.start();
+                isCameraRunning = true;
+
+                document.getElementById('camToggleText').textContent = "Stop Camera";
+                document.getElementById('camToggleBtn').classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                document.getElementById('camToggleBtn').classList.add('bg-rose-600', 'hover:bg-rose-500');
+
+                logConsole("Webcam and MediaPipe tracker started.", "system");
+                showToast("Webcam active!", "success");
+
+            } catch (err) {
+                console.error("Camera access failed:", err);
+                logConsole(`Camera Error: ${err.message}`, 'error');
+                showToast("Failed to access webcam.", "error");
+            }
+        }
+
+        function stopWebcam() {
+            if (cameraStream) {
+                cameraStream.stop();
+                cameraStream = null;
+            }
+            isCameraRunning = false;
+
+            const canvas = document.getElementById('outputCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            document.getElementById('camToggleText').textContent = "Start Camera";
+            document.getElementById('camToggleBtn').classList.remove('bg-rose-600', 'hover:bg-rose-500');
+            document.getElementById('camToggleBtn').classList.add('bg-blue-600', 'hover:bg-blue-500');
+
+            document.getElementById('trackingStatus').textContent = "No Target Detected";
+            document.getElementById('trackingStatus').className = "text-rose-400 font-semibold";
+
+            logConsole("Webcam stopped.", "system");
+        }
+
+        // --- Face Tracking Callback ---
+        function onFaceResults(results) {
+            if (activeEngine !== 'face') return;
+            const canvas = document.getElementById('outputCanvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = results.image.width;
+            canvas.height = results.image.height;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, { color: 'rgba(59, 130, 246, 0.2)', lineWidth: 0.5 });
+                
+                const noseTip = landmarks[1];
+                processTrackingCoordinates(noseTip.x, noseTip.y);
+            } else {
+                document.getElementById('trackingStatus').textContent = "No Face Detected";
+                document.getElementById('trackingStatus').className = "text-rose-400 font-semibold";
+            }
+            ctx.restore();
+        }
+
+        // --- Hand Tracking Callback ---
+        function onHandResults(results) {
+            if (activeEngine !== 'hand') return;
+            const canvas = document.getElementById('outputCanvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = results.image.width;
+            canvas.height = results.image.height;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color: '#3b82f6', lineWidth: 2 });
+                drawLandmarks(ctx, landmarks, { color: '#ef4444', lineWidth: 1, radius: 3 });
+
+                const indexTip = landmarks[8];
+                processTrackingCoordinates(indexTip.x, indexTip.y);
+            } else {
+                document.getElementById('trackingStatus').textContent = "No Hand Detected";
+                document.getElementById('trackingStatus').className = "text-rose-400 font-semibold";
+            }
+            ctx.restore();
+        }
+
+        function processTrackingCoordinates(rawX, rawY) {
+            document.getElementById('trackingStatus').textContent = "Target Active";
+            document.getElementById('trackingStatus').className = "text-emerald-400 font-semibold";
+            document.getElementById('facePosHud').textContent = `${rawX.toFixed(2)}, ${rawY.toFixed(2)}`;
+
+            const panChannel = document.getElementById('panPin').value;
+            const tiltChannel = document.getElementById('tiltPin').value;
+
+            let panPulse = Math.round(mapRange(rawX, 0.2, 0.8, 500, 2500));
+            let tiltPulse = Math.round(mapRange(rawY, 0.2, 0.8, 500, 2500));
+
+            if (faceSafetyEnabled) {
+                panPulse = Math.max(800, Math.min(2200, panPulse));
+                tiltPulse = Math.max(800, Math.min(2200, tiltPulse));
+            }
+
+            const now = Date.now();
+            if (now - lastSendTime > THROTTLE_MS) {
+                const trackingCmd = `#${panChannel}P${panPulse} #${tiltChannel}P${tiltPulse} T60`;
+                sendSerialCommand(trackingCmd, true);
+                lastSendTime = now;
+            }
+        }
+
+        // --- Sequence Recorder & Playback for 6 Servos ---
+        function switchMode(mode) {
+            const visionSec = document.getElementById('visionSection');
+            const seqSec = document.getElementById('sequenceSection');
+            const vBtn = document.getElementById('tabVisionBtn');
+            const sBtn = document.getElementById('tabSequenceBtn');
+
+            if (mode === 'vision') {
+                visionSec.classList.remove('hidden');
+                visionSec.classList.add('flex');
+                seqSec.classList.remove('flex');
+                seqSec.classList.add('hidden');
+                vBtn.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow";
+                sBtn.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+            } else {
+                visionSec.classList.remove('flex');
+                visionSec.classList.add('hidden');
+                seqSec.classList.remove('hidden');
+                seqSec.classList.add('flex');
+                sBtn.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow";
+                vBtn.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200";
+            }
+        }
+
+        function captureStep() {
+            const stepPositions = [...servoPositions];
+            const duration = minTransitionTime;
+            sequenceSteps.push({ positions: stepPositions, duration: duration });
+            renderSequenceSteps();
+            logConsole(`[Recorder] Captured 6-servo step #${sequenceSteps.length}`);
+            showToast(`Captured step #${sequenceSteps.length}`, "success");
+        }
+
+        function renderSequenceSteps() {
+            const list = document.getElementById('sequenceStepsList');
+            document.getElementById('stepCountBadge').innerText = `${sequenceSteps.length} Steps`;
+
+            if (sequenceSteps.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center text-slate-500 text-xs py-12 flex flex-col items-center justify-center gap-2">
+                        <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        <span>No sequence steps recorded yet.<br>Adjust the 6 servo sliders and click "Capture 6-Servo Pose".</span>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = '';
+            sequenceSteps.forEach((step, idx) => {
+                const item = document.createElement('div');
+                item.className = "bg-dark-900 border border-dark-800 p-2.5 rounded-xl flex items-center justify-between text-xs";
+                item.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <span class="font-bold text-blue-400">#${idx + 1}</span>
+                        <span class="text-slate-300 font-mono">[${step.positions.join(', ')}]</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-400">${step.duration}ms</span>
+                        <button onclick="deleteStep(${idx})" class="text-rose-400 hover:text-rose-300 p-1 cursor-pointer">Delete</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function deleteStep(idx) {
+            sequenceSteps.splice(idx, 1);
+            renderSequenceSteps();
+            logConsole(`[Recorder] Deleted step #${idx + 1}`);
+        }
+
+        function clearSequence() {
+            sequenceSteps = [];
+            renderSequenceSteps();
+            logConsole("[Recorder] Sequence cleared.");
+        }
+
+        function playSequence() {
+            if (sequenceSteps.length === 0) {
+                showToast("No sequence steps to play!", "error");
+                return;
+            }
+            if (isPlayingSequence) return;
+
+            isPlayingSequence = true;
+            document.getElementById('playSeqBtn').classList.add('animate-pulse');
+            logConsole("[Sequence] Starting 6-servo sequence playback...");
+
+            let stepIdx = 0;
+            function runStep() {
+                if (!isPlayingSequence || stepIdx >= sequenceSteps.length) {
+                    stopSequence();
+                    logConsole("[Sequence] Playback completed.");
+                    return;
+                }
+
+                let step = sequenceSteps[stepIdx];
+                let cmd = "";
+                step.positions.forEach((pos, i) => {
+                    servoPositions[i] = pos;
+                    cmd += `#${i}P${pos} `;
+                });
+                renderServoSliders();
+
+                cmd += `T${step.duration}`;
+                sendSerialCommand(cmd);
+
+                stepIdx++;
+                playInterval = setTimeout(runStep, step.duration + 100);
+            }
+            runStep();
+        }
+
+        function stopSequence() {
+            isPlayingSequence = false;
+            if (playInterval) clearTimeout(playInterval);
+            document.getElementById('playSeqBtn').classList.remove('animate-pulse');
+            logConsole("[Sequence] Playback stopped.");
+        }
+
+        function exportSequence() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(sequenceSteps, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "ssc32_6servo_sequence.json");
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+            logConsole("[Recorder] Exported sequence to JSON.");
+        }
+
+        function importSequence(event) {
+            const reader = new FileReader();
+            if (event.target.files[0]) {
+                reader.readAsText(event.target.files[0], "UTF-8");
+                reader.onload = (e) => {
+                    try {
+                        sequenceSteps = JSON.parse(e.target.result);
+                        renderSequenceSteps();
+                        logConsole("[Recorder] Imported sequence successfully.", "success");
+                        showToast("Sequence imported!", "success");
+                    } catch(err) {
+                        logConsole(`[Error] Invalid JSON: ${err.message}`, 'error');
+                        showToast("Failed to import sequence JSON.", "error");
+                    }
+                }
+            }
+        }
+
+        // --- Settings & Modal Helpers ---
+        function updateGlobalSpeed(val) {
+            globalSpeedFactor = parseFloat(val);
+            document.getElementById('speedValText').innerText = `${globalSpeedFactor.toFixed(1)}x`;
+        }
+
+        function updateMinTime(val) {
+            minTransitionTime = parseInt(val);
+            document.getElementById('minTimeValText').innerText = `${minTransitionTime} ms`;
+        }
+
+        function toggleFaceSafety(checked) {
+            faceSafetyEnabled = checked;
+            logConsole(`[Safety] Anti-Face-Strike Mode: ${checked ? 'ACTIVE' : 'DISABLED'}`, 'system');
+        }
+
+        async function sendCentreAll() {
+            let cmd = "";
+            for(let i=0; i<6; i++) {
+                servoPositions[i] = 1500;
+                cmd += `#${i}P1500 `;
+            }
+            cmd += "T800";
+            renderServoSliders();
+            await sendSerialCommand(cmd);
+            showToast("Centered all 6 channels to 1500µs!", "success");
+        }
+
+        function mapRange(value, inMin, inMax, outMin, outMax) {
+            const clamped = Math.max(inMin, Math.min(inMax, value));
+            return (clamped - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+        }
+
+        function openModal() {
+            document.getElementById('codeModal').classList.remove('hidden');
+            document.getElementById('codeModal').classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('codeModal').classList.remove('flex');
+            document.getElementById('codeModal').classList.add('hidden');
+        }
+
+        function copyCode() {
+            const codeEl = document.getElementById('arduinoCodeText').innerText;
+            const textarea = document.createElement('textarea');
+            textarea.value = codeEl;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            showToast("Arduino code copied to clipboard!", "success");
+        }
+
+        function logConsole(msg, type = 'info') {
+            const consoleBox = document.getElementById('consoleLog');
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            
+            let color = 'text-slate-300';
+            if (type === 'sent') color = 'text-indigo-400 font-semibold';
+            else if (type === 'received') color = 'text-emerald-400 font-semibold';
+            else if (type === 'error') color = 'text-rose-400 font-semibold';
+            else if (type === 'success') color = 'text-emerald-300 font-semibold';
+            else if (type === 'system') color = 'text-slate-500';
+
+            div.innerHTML = `<span class="text-slate-600">[${time}]</span> <span class="${color}">${escapeHtml(msg)}</span>`;
+            consoleBox.appendChild(div);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('consoleLog').innerHTML = '<div class="text-slate-500">[System] Log cleared.</div>';
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function showToast(msg, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let bg = 'bg-dark-900 border-dark-700 text-white';
+            if (type === 'error') bg = 'bg-rose-950 border-rose-800 text-rose-200';
+            else if (type === 'success') bg = 'bg-emerald-950 border-emerald-800 text-emerald-200';
+
+            toast.className = `pointer-events-auto px-4 py-2.5 rounded-xl border shadow-2xl text-xs flex items-center space-x-2 transition-all duration-300 transform translate-y-2 opacity-0 ${bg}`;
+            toast.innerHTML = `<span>${escapeHtml(msg)}</span>`;
+            
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.remove('translate-y-2', 'opacity-0'), 10);
+            setTimeout(() => {
+                toast.classList.add('translate-y-2', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
