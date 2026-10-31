@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Gyro Servo Controller</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0f172a',
+                        cardBg: '#1e293b',
+                        accent: '#3b82f6',
+                        accentHover: '#2563eb'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+    </style>
+</head>
+<body class="bg-darkBg text-slate-100 min-h-screen flex flex-col justify-between selection:bg-accent selection:text-white">
+
+    <!-- Header -->
+    <header class="w-full bg-cardBg border-b border-slate-800 p-4 sticky top-0 z-50 shadow-md">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <div class="bg-blue-600 p-2 rounded-lg text-white">
+                    <i class="fa-solid fa-gamepad text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">ESP32 Gyro Link</h1>
+                    <p class="text-xs text-slate-400">Phone-to-Servo Web Controller</p>
+                </div>
+            </div>
+            <button id="codeModalBtn" class="bg-slate-700 hover:bg-slate-600 text-xs px-3 py-2 rounded-lg font-medium transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-code"></i>
+                <span>ESP32 Code</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-md mx-auto w-full p-4 flex-1 flex flex-col space-y-4 pb-8">
+
+        <!-- Connection Card -->
+        <div class="bg-cardBg rounded-2xl p-4 border border-slate-800 shadow-lg">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+                    <i class="fa-solid fa-network-wired text-blue-400"></i>
+                    <span>ESP32 Connection</span>
+                </h2>
+                <div id="connectionStatusBadge" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-950 text-red-400 border border-red-800">
+                    <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span id="statusText">Disconnected</span>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <div class="flex space-x-2">
+                    <div class="relative flex-1">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500 text-xs">ws://</span>
+                        <input type="text" id="wsUrlInput" value="192.168.4.1/ws" class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 transition" placeholder="ESP32 IP or URL">
+                    </div>
+                    <button id="connectBtn" class="bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-medium px-4 py-2 rounded-xl text-sm transition shadow-sm">
+                        Connect
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between text-xs text-slate-400 px-1">
+                    <span>Protocol: <strong class="text-slate-300">WebSocket</strong></span>
+                    <span>Rate: <strong id="sendRate" class="text-slate-300">0 msgs/s</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gyro Visualizer Card -->
+        <div class="bg-cardBg rounded-2xl p-4 border border-slate-800 shadow-lg flex-1 flex flex-col items-center justify-center relative overflow-hidden min-h-[260px]">
+            <div class="absolute top-4 left-4 flex items-center space-x-2">
+                <span class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center space-x-2">
+                    <i class="fa-solid fa-compass text-blue-400"></i>
+                    <span>Orientation Horizon</span>
+                </span>
+            </div>
+
+            <!-- 3D Tilt Horizon Box -->
+            <div class="perspective-1000 w-48 h-48 my-6 flex items-center justify-center">
+                <div id="horizonBox" class="w-36 h-36 bg-gradient-to-br from-blue-600 to-indigo-800 rounded-2xl shadow-2xl transform-style-3d transition-transform duration-75 flex flex-col items-center justify-center border border-blue-400/30 relative">
+                    <div class="absolute inset-0 rounded-2xl bg-black/10"></div>
+                    <i class="fa-solid fa-crosshairs text-white/70 text-2xl mb-1 z-10"></i>
+                    <span class="text-[10px] uppercase font-bold tracking-widest text-blue-200 z-10">ESP32 Servo Target</span>
+                </div>
+            </div>
+
+            <!-- Angle Metrics Readout -->
+            <div class="grid grid-cols-2 gap-3 w-full">
+                <div class="bg-slate-900/80 border border-slate-800/80 rounded-xl p-2.5 text-center">
+                    <div class="text-[10px] text-slate-400 uppercase font-semibold">X-Axis (Pitch / Servo 1)</div>
+                    <div id="angleXVal" class="text-lg font-bold text-blue-400">0.0°</div>
+                </div>
+                <div class="bg-slate-900/80 border border-slate-800/80 rounded-xl p-2.5 text-center">
+                    <div class="text-[10px] text-slate-400 uppercase font-semibold">Y-Axis (Roll / Servo 2)</div>
+                    <div id="angleYVal" class="text-lg font-bold text-indigo-400">0.0°</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Action Card -->
+        <div class="bg-cardBg rounded-2xl p-4 border border-slate-800 shadow-lg space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <button id="streamToggleBtn" disabled class="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 text-white font-semibold py-3 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-emerald-950/40">
+                    <i class="fa-solid fa-play" id="streamIcon"></i>
+                    <span id="streamBtnText">Start Streaming</span>
+                </button>
+                <button id="calibrateBtn" class="bg-slate-700 hover:bg-slate-600 active:scale-95 text-white font-semibold py-3 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-crosshairs"></i>
+                    <span>Calibrate Zero</span>
+                </button>
+            </div>
+
+            <!-- Permission trigger for iOS 13+ devices -->
+            <button id="permissionBtn" class="w-full hidden bg-amber-600 hover:bg-amber-700 text-white font-medium py-2.5 px-4 rounded-xl text-xs transition flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>Grant Gyroscope Sensor Permission</span>
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center text-xs text-slate-500 py-3 border-t border-slate-800/60 bg-darkBg">
+        ESP32 Servo Web Controller &bull; Designed for Mobile Touch &amp; Motion
+    </footer>
+
+    <!-- ESP32 Code Modal / Drawer -->
+    <div id="codeModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-cardBg border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-900/50">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-microchip text-blue-400"></i>
+                    <h3 class="font-bold text-sm">ESP32 Arduino Firmware Code</h3>
+                </div>
+                <button id="closeModalBtn" class="text-slate-400 hover:text-slate-200 p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-4 overflow-y-auto flex-1 space-y-3">
+                <p class="text-xs text-slate-300">
+                    Flash this Arduino code to your ESP32 using the <code class="bg-slate-900 px-1.5 py-0.5 rounded text-blue-400">ESP32Servo</code> library and <code class="bg-slate-900 px-1.5 py-0.5 rounded text-blue-400">WebSocketsServer</code> library (by Markus Sattler).
+                </p>
+                <div class="relative">
+                    <button id="copyCodeBtn" class="absolute top-2 right-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded border border-slate-600 transition flex items-center space-x-1">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>Copy Code</span>
+                    </button>
+                    <pre id="arduinoCode" class="bg-slate-950 p-3 rounded-xl text-[11px] font-mono text-slate-300 overflow-x-auto border border-slate-800 leading-relaxed"><code>#include &lt;WiFi.h&gt;
+#include &lt;WebSocketsServer.h&gt;
+#include &lt;ESP32Servo.h&gt;
+
+// Wi-Fi Access Point Credentials
+const char* ssid = "ESP32-Servo-Controller";
+const char* password = "password123";
+
+WebSocketsServer webSocket = WebSocketsServer(81);
+
+Servo servoX; // Connected to X-axis
+Servo servoY; // Connected to Y-axis
+
+const int PIN_SERVO_X = 18; // GPIO 18
+const int PIN_SERVO_Y = 19; // GPIO 19
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+    if(type == WStype_TEXT) {
+        // Expecting JSON string: {"x": 12.5, "y": -4.2}
+        String message = "";
+        for(int i = 0; i < length; i++) {
+            message += (char)payload[i];
+        }
+
+        // Simple JSON Parsing for x and y
+        int xIdx = message.indexOf("\"x\":");
+        int yIdx = message.indexOf("\"y\":");
+
+        if(xIdx != -1 && yIdx != -1) {
+            float angleX = message.substring(xIdx + 4).toFloat();
+            float angleY = message.substring(yIdx + 4).toFloat();
+
+            // Map angles (-90 to +90 degrees) to servo pulse width (0 to 180 degrees)
+            int servoValX = map((int)constrain(angleX, -90, -90), -90, 90, 0, 180);
+            int servoValY = map((int)constrain(angleY, -90, 90), -90, 90, 0, 180);
+
+            servoX.write(servoValX);
+            servoY.write(servoValY);
+        }
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+
+    // Setup AP Mode
+    WiFi.softAP(ssid, password);
+    Serial.println("AP IP address: ");
+    Serial.println(WiFi.softAPIP());
+
+    // Attach Servos
+    ESP32PWM::allocateTimer(0);
+    ESP32PWM::allocateTimer(1);
+    servoX.setPeriodHertz(50);
+    servoY.setPeriodHertz(50);
+    servoX.attach(PIN_SERVO_X, 500, 2400);
+    servoY.attach(PIN_SERVO_Y, 500, 2400);
+
+    // Start WebSocket server
+    webSocket.begin();
+    webSocket.onEvent(webSocketEvent);
+    Serial.println("WebSocket server started on port 81");
+}
+
+void loop() {
+    webSocket.loop();
+}</code></pre>
+                </div>
+            </div>
+            <div class="p-3 border-t border-slate-700 bg-slate-900/50 flex justify-end">
+                <button id="closeModalBtn2" class="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-xl text-xs font-medium transition">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification / Toast -->
+    <div id="toast" class="fixed bottom-16 left-1/2 transform -translate-x-1/2 bg-slate-800 border border-slate-600 text-slate-100 text-xs px-4 py-2 rounded-xl shadow-2xl transition-all duration-300 opacity-0 pointer-events-none z-50">
+        Notification message
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // DOM Elements
+        const wsUrlInput = document.getElementById('wsUrlInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const connectionStatusBadge = document.getElementById('connectionStatusBadge');
+        const statusText = document.getElementById('statusText');
+        const streamToggleBtn = document.getElementById('streamToggleBtn');
+        const streamIcon = document.getElementById('streamIcon');
+        const streamBtnText = document.getElementById('streamBtnText');
+        const calibrateBtn = document.getElementById('calibrateBtn');
+        const permissionBtn = document.getElementById('permissionBtn');
+        const horizonBox = document.getElementById('horizonBox');
+        const angleXVal = document.getElementById('angleXVal');
+        const angleYVal = document.getElementById('angleYVal');
+        const sendRateEl = document.getElementById('sendRate');
+        
+        // Modal elements
+        const codeModalBtn = document.getElementById('codeModalBtn');
+        const codeModal = document.getElementById('codeModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const closeModalBtn2 = document.getElementById('closeModalBtn2');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+        const arduinoCode = document.getElementById('arduinoCode');
+        const toast = document.getElementById('toast');
+
+        // State variables
+        let socket = null;
+        let isConnected = false;
+        let isStreaming = false;
+        let calibrationOffset = { alpha: 0, beta: 0, gamma: 0 };
+        let currentOrientation = { x: 0, y: 0 };
+        let msgCount = 0;
+        let lastRateCheck = Date.now();
+        let lastSendTime = 0;
+        const SEND_INTERVAL_MS = 50; // 20 Hz transmission rate
+
+        // Toast Helper
+        function showToast(message, isError = false) {
+            toast.textContent = message;
+            toast.className = `fixed bottom-16 left-1/2 transform -translate-x-1/2 border text-xs px-4 py-2 rounded-xl shadow-2xl transition-all duration-300 z-50 ${isError ? 'bg-red-950 border-red-700 text-red-200' : 'bg-slate-800 border-slate-600 text-slate-100'}`;
+            toast.style.opacity = '1';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 2500);
+        }
+
+        // Modal Controls
+        codeModalBtn.addEventListener('click', () => codeModal.classList.remove('hidden'));
+        closeModalBtn.addEventListener('click', () => codeModal.classList.add('hidden'));
+        closeModalBtn2.addEventListener('click', () => codeModal.classList.add('hidden'));
+        codeModal.addEventListener('click', (e) => {
+            if (e.target === codeModal) codeModal.classList.add('hidden');
+        });
+
+        // Copy Code Function
+        copyCodeBtn.addEventListener('click', () => {
+            const textToCopy = arduinoCode.innerText;
+            const textArea = document.createElement('textarea');
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('ESP32 code copied to clipboard!');
+            } catch (err) {
+                showToast('Failed to copy code.', true);
+            }
+            document.body.removeChild(textArea);
+        });
+
+        // WebSocket Connection Handling
+        connectBtn.addEventListener('click', () => {
+            if (isConnected) {
+                if (socket) socket.close();
+                setDisconnectedState();
+                showToast('Disconnected from ESP32');
+                return;
+            }
+
+            let url = wsUrlInput.value.trim();
+            if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+                url = 'ws://' + url;
+            }
+
+            showToast('Connecting to ESP32...');
+            connectBtn.disabled = true;
+            connectBtn.textContent = 'Connecting...';
+
+            try {
+                socket = new WebSocket(url);
+
+                socket.onopen = () => {
+                    setConnectedState();
+                    showToast('Successfully connected to ESP32!');
+                };
+
+                socket.onclose = () => {
+                    setDisconnectedState();
+                };
+
+                socket.onerror = (error) => {
+                    console.error('WebSocket Error:', error);
+                    setDisconnectedState();
+                    showToast('Connection failed. Check IP address.', true);
+                };
+            } catch (e) {
+                setDisconnectedState();
+                showToast('Invalid WebSocket URL.', true);
+            }
+        });
+
+        function setConnectedState() {
+            isConnected = true;
+            connectBtn.disabled = false;
+            connectBtn.textContent = 'Disconnect';
+            connectBtn.className = 'bg-red-600 hover:bg-red-700 active:scale-95 text-white font-medium px-4 py-2 rounded-xl text-sm transition shadow-sm';
+            
+            connectionStatusBadge.className = 'flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-950 text-emerald-400 border border-emerald-800';
+            connectionStatusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span id="statusText">Connected</span>';
+            
+            streamToggleBtn.disabled = false;
+        }
+
+        function setDisconnectedState() {
+            isConnected = false;
+            if (isStreaming) toggleStreaming();
+            connectBtn.disabled = false;
+            connectBtn.textContent = 'Connect';
+            connectBtn.className = 'bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-medium px-4 py-2 rounded-xl text-sm transition shadow-sm';
+            
+            connectionStatusBadge.className = 'flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-950 text-red-400 border border-red-800';
+            connectionStatusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span><span id="statusText">Disconnected</span>';
+            
+            streamToggleBtn.disabled = true;
+            sendRateEl.textContent = '0 msgs/s';
+        }
+
+        // Check DeviceOrientation Permission for iOS 13+
+        if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            permissionBtn.classList.remove('hidden');
+            permissionBtn.addEventListener('click', () => {
+                DeviceOrientationEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            permissionBtn.classList.add('hidden');
+                            showToast('Gyroscope permission granted!');
+                        } else {
+                            showToast('Permission denied for gyroscope sensors.', true);
+                        }
+                    })
+                    .catch(console.error);
+            });
+        }
+
+        // Calibration handler
+        calibrateBtn.addEventListener('click', () => {
+            // Set current orientation as zero offset
+            calibrationOffset.beta = window._rawBeta || 0;
+            calibrationOffset.gamma = window._rawGamma || 0;
+            showToast('Zero position calibrated!');
+        });
+
+        // Streaming Toggle
+        streamToggleBtn.addEventListener('click', toggleStreaming);
+
+        function toggleStreaming() {
+            isStreaming = !isStreaming;
+            if (isStreaming) {
+                streamIcon.className = 'fa-solid fa-stop';
+                streamBtnText.textContent = 'Stop Streaming';
+                streamToggleBtn.className = 'bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-semibold py-3 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-rose-950/40';
+                window.addEventListener('deviceorientation', handleOrientation);
+                showToast('Streaming started');
+            } else {
+                streamIcon.className = 'fa-solid fa-play';
+                streamBtnText.textContent = 'Start Streaming';
+                streamToggleBtn.className = 'bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-semibold py-3 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-emerald-950/40';
+                window.removeEventListener('deviceorientation', handleOrientation);
+                showToast('Streaming stopped');
+                // Reset horizon
+                horizonBox.style.transform = `rotateX(0deg) rotateY(0deg)`;
+                angleXVal.textContent = '0.0°';
+                angleYVal.textContent = '0.1°';
+            }
+        }
+
+        // Handle Gyro Data
+        function handleOrientation(event) {
+            if (!event.beta && !event.gamma) return;
+
+            window._rawBeta = event.beta;
+            window._rawGamma = event.gamma;
+
+            // Apply calibration offset and clamp between -90 and 90 degrees
+            let beta = (event.beta || 0) - calibrationOffset.beta;
+            let gamma = (event.gamma || 0) - calibrationOffset.gamma;
+
+            // Constrain angles
+            beta = Math.max(-90, Math.min(90, beta));
+            gamma = Math.max(-90, Math.min(90, gamma));
+
+            currentOrientation.x = beta;
+            currentOrientation.y = gamma;
+
+            // Update UI Visualizer
+            angleXVal.textContent = beta.toFixed(1) + '°';
+            angleYVal.textContent = gamma.toFixed(1) + '°';
+
+            // Rotate 3D Horizon box (pitch maps to rotateX, roll maps to rotateY)
+            horizonBox.style.transform = `rotateX(${-beta}deg) rotateY(${gamma}deg)`;
+
+            // Send data over WebSocket at throttled intervals
+            const now = Date.now();
+            if (isConnected && socket && socket.readyState === WebSocket.OPEN && (now - lastSendTime >= SEND_INTERVAL_MS)) {
+                lastSendTime = now;
+                const payload = JSON.stringify({ x: Number(beta.toFixed(1)), y: Number(gamma.toFixed(1)) });
+                socket.send(payload);
+                msgCount++;
+            }
+
+            // Calculate message rate per second
+            if (now - lastRateCheck >= 1000) {
+                sendRateEl.textContent = `${msgCount} msgs/s`;
+                msgCount = 0;
+                lastRateCheck = now;
+            }
+        }
+    </script>
+</body>
+</html>
